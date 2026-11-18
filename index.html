@@ -53,6 +53,9 @@ body.phone textarea{min-height:150px}
 }
 .go:disabled{opacity:.6; cursor:wait}
 .ghost{background:none; border:1px solid var(--line); color:var(--text); border-radius:12px; padding:10px 16px; font:inherit; cursor:pointer}
+.locked{opacity:.35; pointer-events:none; filter:grayscale(.6)}
+#kstatus{font-size:.9rem; color:var(--muted); min-height:1.6em; margin:-6px 0 12px}
+#kstatus.err{color:var(--err)} #kstatus.ok{color:var(--ok)}
 #status{font-size:.9rem; color:var(--muted)}
 #status.err{color:var(--err)} #status.ok{color:var(--ok)}
 footer{margin-top:20px; font-size:.8rem; color:var(--muted)}
@@ -71,18 +74,21 @@ footer{margin-top:20px; font-size:.8rem; color:var(--muted)}
   <div class="row">
     <label for="key">مفتاح Gemini</label>
     <input id="key" type="password" placeholder="AIza..." autocomplete="off">
-    <select id="model" aria-label="النموذج">
-      <option value="gemini-2.5-flash">2.5 Flash</option>
-      <option value="gemini-2.5-flash-lite">2.5 Flash-Lite</option>
-      <option value="gemini-2.0-flash">2.0 Flash</option>
-    </select>
-    <select id="style" aria-label="الأسلوب">
+    <button class="go" id="check">تحقق</button>
+  </div>
+  <div id="kstatus" role="status"></div>
+  <div class="row" id="opts" hidden>
+    <label for="model">النموذج</label>
+    <select id="model"></select>
+    <label for="style">الأسلوب</label>
+    <select id="style">
       <option value="discord">ديسكورد</option>
       <option value="gaming">غيمنغ</option>
       <option value="everyday">يومي عادي</option>
     </select>
   </div>
 
+  <div id="work" class="locked">
   <div class="grid">
     <div class="box">
       <label for="src">النص</label>
@@ -99,6 +105,7 @@ footer{margin-top:20px; font-size:.8rem; color:var(--muted)}
     <button class="ghost" id="copy">نسخ</button>
     <button class="ghost" id="clear">مسح</button>
     <span id="status" role="status"></span>
+  </div>
   </div>
   <footer>Ctrl + Enter للترجمة. المفتاح محفوظ في متصفحك فقط.</footer>
 </main>
@@ -130,9 +137,8 @@ async function translate(){
   const key = $("key").value.trim();
   const text = $("src").value.trim();
   const st = $("status");
-  if(!key){ st.className="err"; st.textContent="أدخل مفتاح Gemini أولاً."; return; }
   if(!text){ st.className="err"; st.textContent="اكتب نصاً للترجمة."; return; }
-  store.set("gk", key); store.set("gm", $("model").value); store.set("gs", $("style").value);
+  store.set("gm", $("model").value); store.set("gs", $("style").value);
 
   const model = $("model").value;
   const body = {
@@ -140,7 +146,7 @@ async function translate(){
     contents:[{ role:"user", parts:[{ text }] }],
     generationConfig:{ temperature:0.9, maxOutputTokens:2048 }
   };
-  if(model.startsWith("gemini-2.5")) body.generationConfig.thinkingConfig = { thinkingBudget:0 };
+  if(/^gemini-2\.5/.test(model)) body.generationConfig.thinkingConfig = { thinkingBudget:0 };
 
   $("go").disabled = true; st.className=""; st.textContent="جارٍ الترجمة...";
   try{
@@ -162,6 +168,44 @@ async function translate(){
   }
 }
 
+const SKIP = /image|tts|audio|live|embedding|robotics|computer|learnlm|aqa|imagen|veo|gemma|vision/i;
+function verOf(n){ const m = n.match(/gemini-(\d+(?:\.\d+)?)/); return m ? parseFloat(m[1]) : 0; }
+function rank(n){
+  // higher is better: newest version first, full flash before lite, stable before preview
+  return verOf(n)*100 + (/flash/.test(n)?20:0) - (/lite/.test(n)?10:0) - (/preview|exp|latest/.test(n)?5:0);
+}
+
+async function checkKey(){
+  const key = $("key").value.trim();
+  const ks = $("kstatus");
+  if(!key){ ks.className="err"; ks.textContent="أدخل مفتاح Gemini أولاً."; return; }
+  $("check").disabled = true; ks.className=""; ks.textContent="جارٍ التحقق من المفتاح...";
+  try{
+    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000",{ headers:{ "x-goog-api-key": key } });
+    const data = await r.json();
+    if(!r.ok) throw new Error(data?.error?.message || ("HTTP " + r.status));
+    const names = (data.models || [])
+      .filter(m => (m.supportedGenerationMethods||[]).includes("generateContent"))
+      .map(m => m.name.replace(/^models\//,""))
+      .filter(n => /^gemini-/.test(n) && !SKIP.test(n))
+      .sort((a,b) => rank(b) - rank(a));
+    if(!names.length) throw new Error("المفتاح صحيح لكن لا توجد نماذج مناسبة متاحة.");
+    const sel = $("model"); sel.innerHTML = "";
+    names.forEach(n => { const o = document.createElement("option"); o.value = n; o.textContent = n; sel.appendChild(o); });
+    const savedM = store.get("gm");
+    sel.value = names.includes(savedM) ? savedM : names[0];
+    store.set("gk", key);
+    $("opts").hidden = false; $("work").classList.remove("locked");
+    ks.className="ok"; ks.textContent = "المفتاح صحيح ✓ تم جلب " + names.length + " نموذج. يمكنك الترجمة الآن.";
+    $("src").focus();
+  }catch(e){
+    $("work").classList.add("locked"); $("opts").hidden = true;
+    ks.className="err"; ks.textContent = "فشل التحقق: " + e.message;
+  }finally{
+    $("check").disabled = false;
+  }
+}
+
 function setMode(phone){
   document.body.classList.toggle("phone", phone);
   $("m-phone").setAttribute("aria-pressed", phone);
@@ -170,6 +214,8 @@ function setMode(phone){
 }
 
 $("go").onclick = translate;
+$("check").onclick = checkKey;
+$("key").addEventListener("keydown", e => { if(e.key==="Enter") checkKey(); });
 $("src").addEventListener("keydown", e => { if((e.ctrlKey||e.metaKey) && e.key==="Enter") translate(); });
 $("m-desk").onclick = () => setMode(false);
 $("m-phone").onclick = () => setMode(true);
@@ -181,9 +227,9 @@ $("copy").onclick = async () => {
 };
 
 $("key").value = store.get("gk") || "";
-if(store.get("gm")) $("model").value = store.get("gm");
 if(store.get("gs")) $("style").value = store.get("gs");
 const saved = store.get("mode");
+if($("key").value) checkKey();
 setMode(saved ? saved === "phone" : window.matchMedia("(max-width:700px)").matches);
 </script>
 </body>
