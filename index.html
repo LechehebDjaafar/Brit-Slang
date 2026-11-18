@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>مترجم الدارجة ← Brit Slang</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Cairo:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#14172b; --panel:#1d2140; --line:#323868; --text:#eceeff; --muted:#9aa0cf;
+  --accent:#7c8cff; --warm:#ffb86b; --ok:#6be3a4; --err:#ff7b8a;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{
+  background:var(--bg); color:var(--text);
+  font-family:"Cairo",system-ui,sans-serif; line-height:1.6;
+  display:flex; justify-content:center; padding:24px 16px;
+}
+.app{width:100%; max-width:960px; transition:max-width .25s}
+body.phone{align-items:flex-start}
+body.phone .app{
+  max-width:390px; border:2px solid var(--line); border-radius:36px;
+  padding:22px 16px 18px; background:#171a33;
+}
+header{display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:18px}
+h1{font-family:"Space Grotesk","Cairo",sans-serif; font-size:1.6rem; margin:0; letter-spacing:-.01em}
+h1 small{display:block; font-family:"Cairo"; font-size:.85rem; color:var(--muted); font-weight:400}
+.seg{display:inline-flex; border:1px solid var(--line); border-radius:999px; overflow:hidden}
+.seg button{background:none; border:0; color:var(--muted); padding:6px 14px; font:inherit; font-size:.9rem; cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent); color:#10122a; font-weight:600}
+.row{display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px}
+label{font-size:.85rem; color:var(--muted)}
+input,select,textarea{
+  background:var(--panel); border:1px solid var(--line); color:var(--text);
+  border-radius:12px; font:inherit; padding:8px 12px;
+}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+#key{flex:1; min-width:180px; direction:ltr}
+.grid{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+body.phone .grid{grid-template-columns:1fr}
+@media (max-width:700px){.grid{grid-template-columns:1fr}}
+.box{display:flex; flex-direction:column; gap:6px}
+textarea{width:100%; min-height:220px; resize:vertical; padding:14px; font-size:1.05rem}
+body.phone textarea{min-height:150px}
+#out{direction:ltr; text-align:left; font-family:"Space Grotesk","Cairo",sans-serif; background:#101330; border-color:var(--accent)}
+.actions{display:flex; gap:10px; margin-top:14px; align-items:center; flex-wrap:wrap}
+.go{
+  background:var(--warm); color:#2a1a00; border:0; border-radius:12px;
+  padding:10px 22px; font:inherit; font-weight:700; cursor:pointer;
+}
+.go:disabled{opacity:.6; cursor:wait}
+.ghost{background:none; border:1px solid var(--line); color:var(--text); border-radius:12px; padding:10px 16px; font:inherit; cursor:pointer}
+#status{font-size:.9rem; color:var(--muted)}
+#status.err{color:var(--err)} #status.ok{color:var(--ok)}
+footer{margin-top:20px; font-size:.8rem; color:var(--muted)}
+</style>
+</head>
+<body>
+<main class="app">
+  <header>
+    <h1>مترجم الدارجة<small>دارجة جزائرية / عربية ← إنجليزية بريطانية C2</small></h1>
+    <div class="seg" role="group" aria-label="وضع العرض">
+      <button id="m-desk" aria-pressed="true">حاسوب</button>
+      <button id="m-phone" aria-pressed="false">هاتف</button>
+    </div>
+  </header>
+
+  <div class="row">
+    <label for="key">مفتاح Gemini</label>
+    <input id="key" type="password" placeholder="AIza..." autocomplete="off">
+    <select id="model" aria-label="النموذج">
+      <option value="gemini-2.5-flash">2.5 Flash</option>
+      <option value="gemini-2.5-flash-lite">2.5 Flash-Lite</option>
+      <option value="gemini-2.0-flash">2.0 Flash</option>
+    </select>
+    <select id="style" aria-label="الأسلوب">
+      <option value="discord">ديسكورد</option>
+      <option value="gaming">غيمنغ</option>
+      <option value="everyday">يومي عادي</option>
+    </select>
+  </div>
+
+  <div class="grid">
+    <div class="box">
+      <label for="src">النص</label>
+      <textarea id="src" placeholder="اكتب بالدارجة أو العربية..."></textarea>
+    </div>
+    <div class="box">
+      <label for="out">English (UK)</label>
+      <textarea id="out" readonly placeholder="The translation will land here, mate."></textarea>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="go" id="go">ترجم</button>
+    <button class="ghost" id="copy">نسخ</button>
+    <button class="ghost" id="clear">مسح</button>
+    <span id="status" role="status"></span>
+  </div>
+  <footer>Ctrl + Enter للترجمة. المفتاح محفوظ في متصفحك فقط.</footer>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const store = {
+  get(k){ try{ return localStorage.getItem(k) }catch(e){ return null } },
+  set(k,v){ try{ localStorage.setItem(k,v) }catch(e){} }
+};
+
+const STYLES = {
+  discord: "Write like a native British person typing in a Discord server: lowercase-leaning, relaxed, with chat abbreviations such as ngl, tbh, imo, idk, rn, brb, lol, lmao, fr, tho, smh, irl, ikr, nvm, omw, gtg, bruh used where they fit naturally.",
+  gaming: "Write like a British gamer in voice chat or in-game chat: use gaming slang and abbreviations such as gg, wp, ez, afk, brb, rn, nerf, buff, carry, noob, sweaty, clutch, lag, ping, op, ggwp, glhf where they fit naturally.",
+  everyday: "Write like a British person texting a mate: casual and natural, with light slang and a few common abbreviations (tbh, ngl, rn, idk, lol)."
+};
+
+function systemPrompt(style){
+  return `You are a translator from Algerian Darija (including Arabizi / Latin-script Darija, French code-switching) and Modern Standard Arabic into English.
+Rules:
+- Output ONLY the English translation. No quotes, no notes, no explanations, no labels.
+- Register: C2-level, fluent, idiomatic English with a distinctly British voice: British spelling (colour, realise, mate), and British idioms and slang (proper, knackered, gutted, cheers, innit, bloody, sorted, wicked) used naturally, not stuffed in.
+- ${STYLES[style]}
+- Keep the speaker's tone, emotion, humour and emphasis. Translate meaning, not word for word. Preserve emojis, line breaks and names.
+- If the input is already English, rewrite it in the same British style.`;
+}
+
+async function translate(){
+  const key = $("key").value.trim();
+  const text = $("src").value.trim();
+  const st = $("status");
+  if(!key){ st.className="err"; st.textContent="أدخل مفتاح Gemini أولاً."; return; }
+  if(!text){ st.className="err"; st.textContent="اكتب نصاً للترجمة."; return; }
+  store.set("gk", key); store.set("gm", $("model").value); store.set("gs", $("style").value);
+
+  const model = $("model").value;
+  const body = {
+    systemInstruction:{ parts:[{ text: systemPrompt($("style").value) }] },
+    contents:[{ role:"user", parts:[{ text }] }],
+    generationConfig:{ temperature:0.9, maxOutputTokens:2048 }
+  };
+  if(model.startsWith("gemini-2.5")) body.generationConfig.thinkingConfig = { thinkingBudget:0 };
+
+  $("go").disabled = true; st.className=""; st.textContent="جارٍ الترجمة...";
+  try{
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
+      method:"POST",
+      headers:{ "Content-Type":"application/json", "x-goog-api-key": key },
+      body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    if(!r.ok) throw new Error(data?.error?.message || ("HTTP " + r.status));
+    const out = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("").trim();
+    if(!out) throw new Error("لم يرجع النموذج نصاً (ربما حُجب المحتوى).");
+    $("out").value = out;
+    st.className="ok"; st.textContent="تمت الترجمة.";
+  }catch(e){
+    st.className="err"; st.textContent = "خطأ: " + e.message;
+  }finally{
+    $("go").disabled = false;
+  }
+}
+
+function setMode(phone){
+  document.body.classList.toggle("phone", phone);
+  $("m-phone").setAttribute("aria-pressed", phone);
+  $("m-desk").setAttribute("aria-pressed", !phone);
+  store.set("mode", phone ? "phone" : "desk");
+}
+
+$("go").onclick = translate;
+$("src").addEventListener("keydown", e => { if((e.ctrlKey||e.metaKey) && e.key==="Enter") translate(); });
+$("m-desk").onclick = () => setMode(false);
+$("m-phone").onclick = () => setMode(true);
+$("clear").onclick = () => { $("src").value=""; $("out").value=""; $("status").textContent=""; $("src").focus(); };
+$("copy").onclick = async () => {
+  const v = $("out").value; if(!v) return;
+  try{ await navigator.clipboard.writeText(v); $("status").className="ok"; $("status").textContent="تم النسخ."; }
+  catch(e){ $("out").select(); document.execCommand("copy"); }
+};
+
+$("key").value = store.get("gk") || "";
+if(store.get("gm")) $("model").value = store.get("gm");
+if(store.get("gs")) $("style").value = store.get("gs");
+const saved = store.get("mode");
+setMode(saved ? saved === "phone" : window.matchMedia("(max-width:700px)").matches);
+</script>
+</body>
+</html>
